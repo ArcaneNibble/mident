@@ -5,29 +5,32 @@
 //!     };
 //! }
 //!
-//! macro_rules! gen_ident {
+//! macro_rules! rand_ident {
 //!     ($ty:path, $e:expr) => {
 //!         mident::mident!{ gen_ident_!{$ty, $e, #rand} }
 //!     };
 //! }
 //!
-//! gen_ident!(u32, 123);
-//! gen_ident!(u32, 123);
-//!
-//! macro_rules! concat_ident_ {
-//!     ($ty:path, $e:expr, $i:ident) => {
-//!         const $i: $ty = $e;
+//! macro_rules! upcase_ident {
+//!     ($a:ident, $ty:path, $e:expr) => {
+//!         mident::mident!{ gen_ident_!{$ty, $e, #upcase $a } }
 //!     };
 //! }
 //!
+//! upcase_ident!(foo, u32, 123);
+//! const baz: u32 = FOO;
+//!
+//! rand_ident!(u32, 123);
+//! rand_ident!(u32, 123);
+//!
 //! macro_rules! concat_ident {
 //!     ($a:ident, $b:ident, $ty:path, $e:expr) => {
-//!         mident::mident!{ concat_ident_!{$ty, $e, #concat($a $b _ #concat($b $a)) } }
+//!         mident::mident!{ gen_ident_!{$ty, $e, #concat($a $b _ #upcase #concat($b $a)) } }
 //!     };
 //! }
 //!
 //! concat_ident!(foo, bar, u32, 123);
-//! const baz: u32 = foobar_barfoo;
+//! const qux: u32 = foobar_BARFOO;
 //! ```
 
 extern crate proc_macro;
@@ -72,6 +75,38 @@ fn eval_mident_expr(
             pos.next();
             let new_id_str = format!("__{}", Uuid::new_v4().simple());
             Some(new_id_str)
+        }
+
+        "upcase" | "downcase" => {
+            pos.next();
+            let next = pos
+                .peek()
+                .expect("#{up|down}case must be followed by an arg");
+            match next {
+                TokenTree::Ident(ident) => {
+                    let mut new_id_str = ident.to_string();
+                    if cmd == "upcase" {
+                        new_id_str.make_ascii_uppercase();
+                    } else {
+                        new_id_str.make_ascii_lowercase();
+                    }
+                    pos.next();
+                    Some(new_id_str)
+                }
+                TokenTree::Punct(..) => {
+                    let mut new_id_str = eval_mident_expr(pos, false)
+                        .expect("can only #{up|down}case an ident or a mident command");
+                    if cmd == "upcase" {
+                        new_id_str.make_ascii_uppercase();
+                    } else {
+                        new_id_str.make_ascii_lowercase();
+                    }
+                    Some(new_id_str)
+                }
+                _ => {
+                    panic!("can only #{{up|down}}case an ident or a mident command")
+                }
+            }
         }
 
         "concat" => {
