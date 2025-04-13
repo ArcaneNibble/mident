@@ -38,8 +38,8 @@
 //!     };
 //! }
 //!
-//! flatten_ident!(::FooStruct<'static, u32>, u32, 123);
-//! const uwu: u32 = FooStruct_3C__27_static_2C_u32_3E_;
+//! flatten_ident!(::FooStruct<'static, u32, 5>, u32, 123);
+//! const uwu: u32 = FooStruct_3C__27_static_2C_u32_2C_5_3E_;
 //!
 //! macro_rules! ty_path_test {
 //!     ($a:path, $e:expr) => {
@@ -200,7 +200,16 @@ fn eval_mident_expr(
                             flatten(new_id_str, inner);
                             new_id_str.push_str(close);
                         }
-                        TokenTree::Literal(_) => panic!("cannot #flatten{{_basename}} a literal"),
+                        TokenTree::Literal(literal) => {
+                            for c in literal.to_string().chars() {
+                                if c.is_ascii_alphanumeric() || c == '_' {
+                                    new_id_str.push(c);
+                                } else {
+                                    new_id_str.push_str(&format!("_{:X}_", c as i32));
+                                }
+                            }
+                            toks.next();
+                        }
                     }
                 }
             }
