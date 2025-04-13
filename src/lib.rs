@@ -31,6 +31,15 @@
 //!
 //! concat_ident!(foo, bar, u32, 123);
 //! const qux: u32 = foobar_BARFOO;
+//!
+//! macro_rules! flatten_ident {
+//!     ($a:path, $ty:path, $e:expr) => {
+//!         mident::mident!{ gen_ident_!{$ty, $e, #flatten_basename($a) } }
+//!     };
+//! }
+//!
+//! flatten_ident!(::FooStruct<'static, u32>, u32, 123);
+//! const uwu: u32 = FooStruct_3C__27_static_2C_u32_3E_;
 //! ```
 
 extern crate proc_macro;
@@ -109,6 +118,86 @@ fn eval_mident_expr(
             }
         }
 
+        "flatten" | "flatten_basename" => {
+            pos.next();
+            let group = pos
+                .next()
+                .expect("#flatten{_basename} must be followed by a group");
+            let group = if let TokenTree::Group(group) = group {
+                group
+            } else {
+                panic!("#flatten{{_basename}} must be followed by a group")
+            };
+
+            // attempt to unwrap one layer of macro blue paint
+            let mut group_inner = group.stream().into_iter().peekable();
+            let group_inner = if let Some(TokenTree::Group(group)) = group_inner.peek() {
+                if group.delimiter() == Delimiter::None {
+                    group.stream().into_iter().peekable()
+                } else {
+                    group_inner
+                }
+            } else {
+                group_inner
+            };
+
+            let mut new_id_str = String::new();
+            let toks_to_concat = if cmd == "flatten" {
+                group_inner
+            } else {
+                // This is an ugly implementation. Find the last ':', but round-trip through a Vec
+                let mut toks = group_inner.clone().collect::<Vec<_>>();
+                let last_colon = toks.iter().rposition(|x| {
+                    if let TokenTree::Punct(punct) = x {
+                        punct.as_char() == ':'
+                    } else {
+                        false
+                    }
+                });
+                if let Some(last_colon) = last_colon {
+                    let new_toks = TokenStream::from_iter(toks.drain(last_colon + 1..));
+                    new_toks.into_iter().peekable()
+                } else {
+                    group_inner
+                }
+            };
+            fn flatten(new_id_str: &mut String, mut toks: Peekable<token_stream::IntoIter>) {
+                while let Some(tok) = toks.peek() {
+                    match tok {
+                        TokenTree::Ident(ident) => {
+                            new_id_str.push_str(&ident.to_string());
+                            toks.next();
+                        }
+                        TokenTree::Punct(punct) => {
+                            let punct = punct.as_char();
+                            let evaled = eval_mident_expr(&mut toks, false);
+                            if let Some(evaled) = evaled {
+                                new_id_str.push_str(&evaled);
+                            } else {
+                                new_id_str.push_str(&format!("_{:X}_", punct as i32));
+                            }
+                        }
+                        TokenTree::Group(group) => {
+                            let (open, close) = match group.delimiter() {
+                                Delimiter::Parenthesis => ("_28_", "_29_"),
+                                Delimiter::Brace => ("_7B_", "_7D_"),
+                                Delimiter::Bracket => ("_5B_", "_5D_"),
+                                Delimiter::None => ("", ""),
+                            };
+                            let inner = group.stream().into_iter().peekable();
+                            toks.next();
+                            new_id_str.push_str(open);
+                            flatten(new_id_str, inner);
+                            new_id_str.push_str(close);
+                        }
+                        TokenTree::Literal(_) => panic!("cannot #flatten{{_basename}} a literal"),
+                    }
+                }
+            }
+            flatten(&mut new_id_str, toks_to_concat);
+            Some(new_id_str)
+        }
+
         "concat" => {
             pos.next();
             let group = pos.next().expect("#concat must be followed by a group");
@@ -119,7 +208,7 @@ fn eval_mident_expr(
             };
 
             let mut new_id_str = String::new();
-            let mut toks_to_concat = Peekable::from(group.stream().into_iter().peekable());
+            let mut toks_to_concat = group.stream().into_iter().peekable();
             while let Some(tok) = toks_to_concat.peek() {
                 match tok {
                     TokenTree::Ident(ident) => {
@@ -136,7 +225,7 @@ fn eval_mident_expr(
                     }
                 }
             }
-            return Some(new_id_str);
+            Some(new_id_str)
         }
         _ => None,
     }
@@ -181,8 +270,5 @@ impl Iterator for MidentInner {
 
 #[proc_macro]
 pub fn mident(input: TokenStream) -> TokenStream {
-    dbg!(&input);
-    let output = TokenStream::from_iter(MidentInner::from(input));
-    dbg!(&output);
-    output
+    TokenStream::from_iter(MidentInner::from(input))
 }
