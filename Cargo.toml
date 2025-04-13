@@ -1,0 +1,10 @@
+[package]
+name = "mident"
+version = "0.0.1"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+uuid = { version = "1.16", features = ["v4"] }
