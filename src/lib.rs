@@ -137,7 +137,7 @@ fn eval_mident_expr(
             Some(new_id_str)
         }
 
-        "flatten" | "flatten_basename" => {
+        "concat" | "flatten" | "flatten_basename" => {
             pos.next();
             let group = pos
                 .next()
@@ -152,7 +152,7 @@ fn eval_mident_expr(
             let group_inner = maybe_unwrap_group(group);
 
             let mut new_id_str = String::new();
-            let toks_to_concat = if cmd == "flatten" {
+            let toks_to_concat = if cmd != "flatten_basename" {
                 group_inner
             } else {
                 // This is an ugly implementation. Find the last ':', but round-trip through a Vec
@@ -171,7 +171,11 @@ fn eval_mident_expr(
                     group_inner
                 }
             };
-            fn flatten(new_id_str: &mut String, mut toks: Peekable<token_stream::IntoIter>) {
+            fn flatten(
+                cmd: &str,
+                new_id_str: &mut String,
+                mut toks: Peekable<token_stream::IntoIter>,
+            ) {
                 while let Some(tok) = toks.peek() {
                     match tok {
                         TokenTree::Ident(ident) => {
@@ -184,10 +188,16 @@ fn eval_mident_expr(
                             if let Some(evaled) = evaled {
                                 new_id_str.push_str(&evaled);
                             } else {
+                                if cmd == "concat" {
+                                    panic!("can only #concat idents or mident commands")
+                                }
                                 new_id_str.push_str(&format!("_{:X}_", punct as i32));
                             }
                         }
                         TokenTree::Group(group) => {
+                            if cmd == "concat" {
+                                panic!("can only #concat idents or mident commands")
+                            }
                             let (open, close) = match group.delimiter() {
                                 Delimiter::Parenthesis => ("_28_", "_29_"),
                                 Delimiter::Brace => ("_7B_", "_7D_"),
@@ -197,10 +207,13 @@ fn eval_mident_expr(
                             let inner = group.stream().into_iter().peekable();
                             toks.next();
                             new_id_str.push_str(open);
-                            flatten(new_id_str, inner);
+                            flatten(cmd, new_id_str, inner);
                             new_id_str.push_str(close);
                         }
                         TokenTree::Literal(literal) => {
+                            if cmd == "concat" {
+                                panic!("can only #concat idents or mident commands")
+                            }
                             for c in literal.to_string().chars() {
                                 if c.is_ascii_alphanumeric() || c == '_' {
                                     new_id_str.push(c);
@@ -213,37 +226,7 @@ fn eval_mident_expr(
                     }
                 }
             }
-            flatten(&mut new_id_str, toks_to_concat);
-            Some(new_id_str)
-        }
-
-        "concat" => {
-            pos.next();
-            let group = pos.next().expect("#concat must be followed by a group");
-            let group = if let TokenTree::Group(group) = group {
-                group
-            } else {
-                panic!("#concat must be followed by a group")
-            };
-
-            let mut new_id_str = String::new();
-            let mut toks_to_concat = group.stream().into_iter().peekable();
-            while let Some(tok) = toks_to_concat.peek() {
-                match tok {
-                    TokenTree::Ident(ident) => {
-                        new_id_str.push_str(&ident.to_string());
-                        toks_to_concat.next();
-                    }
-                    TokenTree::Punct(..) => {
-                        let evaled = eval_mident_expr(&mut toks_to_concat, false)
-                            .expect("can only #concat idents or mident commands");
-                        new_id_str.push_str(&evaled);
-                    }
-                    _ => {
-                        panic!("can only #concat idents or mident commands")
-                    }
-                }
-            }
+            flatten(cmd, &mut new_id_str, toks_to_concat);
             Some(new_id_str)
         }
         _ => None,
@@ -329,6 +312,7 @@ impl Iterator for MidentInner {
     }
 }
 
+/// Macro Identifier toolbox macro
 #[proc_macro]
 pub fn mident(input: TokenStream) -> TokenStream {
     TokenStream::from_iter(MidentInner::from(input))
