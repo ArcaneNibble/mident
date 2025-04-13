@@ -31,7 +31,7 @@ When using the `#flatten` command in multiple places, the output will only be an
 if they are spelled exactly the same (e.g. no type aliases or even differing qualified paths).
 
 # Examples
-```
+```rust
 // Common macro which creates a variable
 macro_rules! gen_ident_ {
     ($ty:path, $e:expr, $i:ident) => {
