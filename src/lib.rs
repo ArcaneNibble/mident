@@ -58,6 +58,21 @@ use std::iter::Peekable;
 use proc_macro::*;
 use uuid::Uuid;
 
+// either turn the group's contents into a peekable tokenstream, or
+// unwrap one layer of Delimiter::None and then do the same
+fn maybe_unwrap_group(group: Group) -> Peekable<token_stream::IntoIter> {
+    let mut group_inner = group.stream().into_iter().peekable();
+    if let Some(TokenTree::Group(group)) = group_inner.peek() {
+        if group.delimiter() == Delimiter::None {
+            group.stream().into_iter().peekable()
+        } else {
+            group_inner
+        }
+    } else {
+        group_inner
+    }
+}
+
 fn eval_mident_expr(
     pos: &mut Peekable<token_stream::IntoIter>,
     already_got_hash: bool,
@@ -101,31 +116,25 @@ fn eval_mident_expr(
             let next = pos
                 .peek()
                 .expect("#{up|down}case must be followed by an arg");
-            match next {
+            let mut new_id_str = match next {
                 TokenTree::Ident(ident) => {
-                    let mut new_id_str = ident.to_string();
-                    if cmd == "upcase" {
-                        new_id_str.make_ascii_uppercase();
-                    } else {
-                        new_id_str.make_ascii_lowercase();
-                    }
+                    let s = ident.to_string();
                     pos.next();
-                    Some(new_id_str)
+                    s
                 }
-                TokenTree::Punct(..) => {
-                    let mut new_id_str = eval_mident_expr(pos, false)
-                        .expect("can only #{up|down}case an ident or a mident command");
-                    if cmd == "upcase" {
-                        new_id_str.make_ascii_uppercase();
-                    } else {
-                        new_id_str.make_ascii_lowercase();
-                    }
-                    Some(new_id_str)
-                }
+                TokenTree::Punct(..) => eval_mident_expr(pos, false)
+                    .expect("can only #{up|down}case an ident or a mident command"),
                 _ => {
                     panic!("can only #{{up|down}}case an ident or a mident command")
                 }
+            };
+            if cmd == "upcase" {
+                new_id_str.make_ascii_uppercase();
+            } else {
+                new_id_str.make_ascii_lowercase();
             }
+
+            Some(new_id_str)
         }
 
         "flatten" | "flatten_basename" => {
@@ -140,16 +149,7 @@ fn eval_mident_expr(
             };
 
             // attempt to unwrap one layer of macro blue paint
-            let mut group_inner = group.stream().into_iter().peekable();
-            let group_inner = if let Some(TokenTree::Group(group)) = group_inner.peek() {
-                if group.delimiter() == Delimiter::None {
-                    group.stream().into_iter().peekable()
-                } else {
-                    group_inner
-                }
-            } else {
-                group_inner
-            };
+            let group_inner = maybe_unwrap_group(group);
 
             let mut new_id_str = String::new();
             let toks_to_concat = if cmd == "flatten" {
@@ -287,17 +287,7 @@ impl Iterator for MidentInner {
                             };
 
                             // attempt to unwrap one layer of macro blue paint
-                            let mut group_inner = group.stream().into_iter().peekable();
-                            let group_inner =
-                                if let Some(TokenTree::Group(group)) = group_inner.peek() {
-                                    if group.delimiter() == Delimiter::None {
-                                        group.stream().into_iter().peekable()
-                                    } else {
-                                        group_inner
-                                    }
-                                } else {
-                                    group_inner
-                                };
+                            let group_inner = maybe_unwrap_group(group);
 
                             // This is an ugly implementation. Find the last ':', but round-trip through a Vec
                             let mut toks = group_inner.collect::<Vec<_>>();
