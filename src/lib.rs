@@ -38,8 +38,8 @@
 //!     };
 //! }
 //!
-//! flatten_ident!(::FooStruct<'static, u32, 5>, u32, 123);
-//! const uwu: u32 = FooStruct_3C__27_static_2C_u32_2C_5_3E_;
+//! flatten_ident!(::FooStruct<'static, u32, 5, 'a'>, u32, 123);
+//! const uwu: u32 = FooStruct_3C__27_static_2C_u32_2C_5_2C__27_a_27__3E_;
 //!
 //! macro_rules! ty_path_test {
 //!     ($a:path, $e:expr) => {
