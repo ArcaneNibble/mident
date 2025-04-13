@@ -40,6 +40,16 @@
 //!
 //! flatten_ident!(::FooStruct<'static, u32>, u32, 123);
 //! const uwu: u32 = FooStruct_3C__27_static_2C_u32_3E_;
+//!
+//! macro_rules! ty_path_test {
+//!     ($a:path, $e:expr) => {
+//!         mident::mident!{
+//!             const #rand: #ty_path($a) Vec<u32> = $e;
+//!         }
+//!     };
+//! }
+//!
+//! ty_path_test!(::std::vec::FooStruct<'static, u32>, Vec::new());
 //! ```
 
 extern crate proc_macro;
@@ -255,9 +265,61 @@ impl Iterator for MidentInner {
             TokenTree::Punct(ref punct) => {
                 if punct.as_char() == '#' && punct.spacing() == Spacing::Alone {
                     // a hash mark
+
+                    // recursive ident commands
                     if let Some(evaled) = eval_mident_expr(&mut self.input, true) {
                         let new_id = Ident::new(&evaled, Span::call_site());
                         return Some(TokenTree::Ident(new_id));
+                    }
+
+                    // other commands
+                    if let TokenTree::Ident(ident) = self.input.peek()? {
+                        if ident.to_string() == "ty_path" {
+                            self.input.next();
+                            let group = self
+                                .input
+                                .next()
+                                .expect("#ty_path must be followed by a group");
+                            let group = if let TokenTree::Group(group) = group {
+                                group
+                            } else {
+                                panic!("#ty_path must be followed by a group")
+                            };
+
+                            // attempt to unwrap one layer of macro blue paint
+                            let mut group_inner = group.stream().into_iter().peekable();
+                            let group_inner =
+                                if let Some(TokenTree::Group(group)) = group_inner.peek() {
+                                    if group.delimiter() == Delimiter::None {
+                                        group.stream().into_iter().peekable()
+                                    } else {
+                                        group_inner
+                                    }
+                                } else {
+                                    group_inner
+                                };
+
+                            // This is an ugly implementation. Find the last ':', but round-trip through a Vec
+                            let mut toks = group_inner.collect::<Vec<_>>();
+                            if let Some(last_colon) = toks.iter().rposition(|x| {
+                                if let TokenTree::Punct(punct) = x {
+                                    punct.as_char() == ':'
+                                } else {
+                                    false
+                                }
+                            }) {
+                                let new_toks = TokenStream::from_iter(toks.drain(..last_colon + 1));
+                                return Some(TokenTree::Group(Group::new(
+                                    Delimiter::None,
+                                    new_toks,
+                                )));
+                            } else {
+                                return Some(TokenTree::Group(Group::new(
+                                    Delimiter::None,
+                                    TokenStream::new(),
+                                )));
+                            }
+                        }
                     }
                 }
             }
