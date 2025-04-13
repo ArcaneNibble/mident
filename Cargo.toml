@@ -2,6 +2,9 @@
 name = "mident"
 version = "0.0.1"
 edition = "2024"
+license = "0BSD"
+repository = "https://github.com/ArcaneNibble/mident"
+description = "Macro Identifier toolbox -- generate/concat idents in macros"
 
 [lib]
 proc-macro = true
