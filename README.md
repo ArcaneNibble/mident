@@ -1,5 +1,10 @@
 # Macro Identifier toolbox
 
+[![free of syn](https://img.shields.io/badge/free%20of-syn-hotpink)](https://github.com/fasterthanlime/free-of-syn)
+[![crates.io](https://img.shields.io/crates/v/mident.svg)](https://crates.io/crates/mident)
+[![documentation](https://docs.rs/mident/badge.svg)](https://docs.rs/mident)
+[![MIT/Apache-2.0 licensed](https://img.shields.io/crates/l/mident.svg)](./LICENSE)
+
 This crate is a collection of small tools for constructing identifiers inside `macro_rules!`
 declarative macros. This can help reduce unnecessary use of the `syn` and `quote` crates.
 
